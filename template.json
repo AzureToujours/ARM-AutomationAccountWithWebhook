@@ -1,0 +1,92 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "automationAccountName": {
+      "type": "string"
+    },
+    "runbookName": {
+      "type": "string"
+    },
+    "webhookName": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "tmpToken11": "[uniqueString(subscription().id, resourceGroup().id, parameters('automationAccountName'), parameters('webhookName'))]",
+    "tmpToken12": "[uniqueString(resourceGroup().id, parameters('automationAccountName'), parameters('webhookName'))]",
+    "tmpToken21": "[uniqueString(subscription().id, resourceGroup().id, parameters('automationAccountName'), parameters('runbookName'))]",
+    "tmpToken22": "[uniqueString(resourceGroup().id, parameters('automationAccountName'), parameters('runbookName'))]",
+    "webhookTokenPart1": "[substring(format('{0}{1}', variables('tmpToken11'), variables('tmpToken12')), 0, 20)]",
+    "webhookTokenPart2": "[substring(format('{0}{1}', variables('tmpToken21'), variables('tmpToken22')), 0, 22)]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Automation/automationAccounts",
+      "apiVersion": "2023-11-01",
+      "name": "[parameters('automationAccountName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "disableLocalAuth": false,
+        "publicNetworkAccess": true,
+        "sku": {
+          "name": "Basic",
+          "capacity": null,
+          "family": null
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/runbooks",
+      "apiVersion": "2023-11-01",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), parameters('runbookName'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "runbookType": "PowerShell",
+        "logProgress": true,
+        "logVerbose": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Automation/automationAccounts/webhooks",
+      "apiVersion": "2015-10-31",
+      "name": "[format('{0}/{1}', parameters('automationAccountName'), parameters('webhookName'))]",
+      "properties": {
+        "expiryTime": "2024-12-01T18:00:00Z",
+        "isEnabled": true,
+        "uri": "[format('{0}webhooks?token={1}%2b{2}%3d', substring(replace(reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2023-11-01').automationHybridServiceUrl, '.jrds.', '.webhook.'), 0, add(indexOf(reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2023-11-01').automationHybridServiceUrl, '.azure-automation.net/'), 25)), variables('webhookTokenPart1'), variables('webhookTokenPart2'))]",
+        "runbook": {
+          "name": "[parameters('runbookName')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]",
+        "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), parameters('runbookName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "automationAccountId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName'))]"
+    },
+    "runbookId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Automation/automationAccounts/runbooks', parameters('automationAccountName'), parameters('runbookName'))]"
+    },
+    "webhookUri": {
+      "type": "string",
+      "value": "[format('{0}webhooks?token={1}%2b{2}%3d', substring(replace(reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2023-11-01').automationHybridServiceUrl, '.jrds.', '.webhook.'), 0, add(indexOf(reference(resourceId('Microsoft.Automation/automationAccounts', parameters('automationAccountName')), '2023-11-01').automationHybridServiceUrl, '.azure-automation.net/'), 25)), variables('webhookTokenPart1'), variables('webhookTokenPart2'))]"
+    }
+  }
+}
